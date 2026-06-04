@@ -12,6 +12,7 @@ export type ProposedSession = {
   time: string;
   location: string;
   createdAt: string;
+  completedAt?: string;
 };
 
 export function getProposedSessionsSnapshot() {
@@ -58,6 +59,22 @@ export function addProposedSession(
     },
     ...sessions,
   ]);
+}
+
+export function toggleProposedSessionCompletion(sessionId: string) {
+  const sessions = getProposedSessions();
+  const now = new Date().toISOString();
+
+  saveProposedSessions(
+    sessions.map((session) =>
+      session.id === sessionId
+        ? {
+            ...session,
+            completedAt: session.completedAt ? undefined : now,
+          }
+        : session
+    )
+  );
 }
 
 export function subscribeToProposedSessions(listener: () => void) {

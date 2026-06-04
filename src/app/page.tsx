@@ -199,7 +199,6 @@ export default function Home() {
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
   const [isMentorOpen, setIsMentorOpen] = useState(false);
   const [isSessionProposalOpen, setIsSessionProposalOpen] = useState(false);
-  const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [selectedMentorId, setSelectedMentorId] = useState<string | null>(null);
   const [intakeForm, setIntakeForm] = useState(emptyIntakeForm);
   const [goalForm, setGoalForm] = useState(emptyGoalForm);
@@ -239,6 +238,25 @@ export default function Home() {
     });
   }, [savedOnboarding, savedProfile]);
   const topRatedResourceCourses = useMemo(() => recommendedCourses.slice(0, 2), [recommendedCourses]);
+  const sidebarLearningCourses = useMemo(() => recommendedCourses.slice(0, 2), [recommendedCourses]);
+  const sidebarCourseProgress = useMemo(
+    () =>
+      courses
+        .map((course) => {
+          const lessons = getCourseLessons(course);
+          const progress = courseProgress[course.id] ?? null;
+
+          return {
+            course,
+            completedLessons: progress?.completedLessonIds.length ?? 0,
+            totalLessons: lessons.length,
+            completionPercent: getCourseCompletionPercent(progress, lessons.length),
+            isStarted: Boolean(progress),
+          };
+        })
+        .filter((courseSummary) => courseSummary.isStarted),
+    [courseProgress]
+  );
   const sortedMentorList = useMemo(() => {
     const selectedTopics = savedProfile?.interestTopics.length
       ? savedProfile.interestTopics
@@ -260,15 +278,17 @@ export default function Home() {
     });
   }, [intakeForm.interestTopics, savedProfile]);
 
-  const startedCourses = useMemo(
-    () => courses.filter((course) => Boolean(courseProgress[course.id])),
-    [courseProgress]
-  );
   const sessionMentors = useMemo(() => {
     const mentorIds = new Set(proposedSessions.map((session) => session.mentorId));
 
     return mentorList.filter((mentor) => mentorIds.has(mentor.id));
   }, [proposedSessions]);
+  const isFirstSessionComplete = useMemo(
+    () => proposedSessions.some((session) => Boolean(session.completedAt)),
+    [proposedSessions]
+  );
+  const isAnyGoalSet = projectGoals.length > 0;
+  const isAnyProgressTracked = Object.keys(courseProgress).length > 0;
   const hasCompletedCourseLesson = useMemo(
     () =>
       Object.values(courseProgress).some(
@@ -342,6 +362,50 @@ export default function Home() {
   );
   const unlockedAchievementCount = achievements.filter((achievement) => achievement.unlocked).length;
   const rewardPoints = 550 + unlockedAchievementCount * 100;
+  const journeySteps = [
+    {
+      id: 1,
+      label: "Onboard & Profile",
+      complete: true,
+      current: false,
+      onClick: () => router.push("/onboarding"),
+    },
+    {
+      id: 2,
+      label: "Find a Mentor",
+      complete: sessionMentors.length > 0,
+      current: sessionMentors.length === 0,
+      onClick: () => openSessionProposal(),
+    },
+    {
+      id: 3,
+      label: "First Session",
+      complete: isFirstSessionComplete,
+      current: sessionMentors.length > 0 && !isFirstSessionComplete,
+      onClick: () => router.push("/sessions"),
+    },
+    {
+      id: 4,
+      label: "Set Goals",
+      complete: isAnyGoalSet,
+      current: isFirstSessionComplete && !isAnyGoalSet,
+      onClick: () => router.push("/goals"),
+    },
+    {
+      id: 5,
+      label: "Track Progress",
+      complete: isAnyProgressTracked,
+      current: isAnyGoalSet && !isAnyProgressTracked,
+      onClick: () => router.push("/progress"),
+    },
+    {
+      id: 6,
+      label: "Achieve & Get Recognized",
+      complete: unlockedAchievementCount > 0,
+      current: isAnyProgressTracked,
+      onClick: () => router.push("/achievements"),
+    },
+  ];
 
   function handleIntakeSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -397,10 +461,10 @@ export default function Home() {
     setGoalForm(emptyGoalForm);
   }
 
-  function openSessionProposal() {
+  function openSessionProposal(mentorId = selectedMentorId ?? "") {
     setSessionForm({
       ...emptySessionForm,
-      mentorId: selectedMentorId ?? "",
+      mentorId,
     });
     setIsSessionProposalOpen(true);
   }
@@ -459,11 +523,43 @@ export default function Home() {
           </button>
         </header>
 
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+          <div className="text-center">
+            <h2 className="text-xl font-black">Your Mentorship Journey</h2>
+          </div>
+
+          <div className="mt-7 grid gap-4 md:grid-cols-6">
+            {journeySteps.map((step, index) => (
+              <div key={step.id} className="relative flex flex-col items-center gap-3">
+                {index > 0 ? (
+                  <div className="absolute top-6 right-1/2 hidden h-0.5 w-full bg-slate-200 md:block" />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={step.onClick}
+                  className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full text-lg font-semibold transition ${
+                    step.complete
+                      ? "bg-emerald-500 text-white"
+                      : step.current
+                        ? "bg-blue-200 text-blue-700"
+                        : "bg-slate-200 text-slate-500"
+                  }`}
+                  aria-label={step.label}
+                >
+                  {step.complete ? "✓" : step.id}
+                </button>
+                <p className={`text-center text-xs font-medium ${step.current ? "text-blue-600" : "text-slate-600"}`}>
+                  {step.id}. {step.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-w-0 flex-col gap-8">
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+        <section className="hidden">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold">Project Goals</h2>
@@ -586,7 +682,7 @@ export default function Home() {
             </div>
             <button
               type="button"
-              onClick={() => setIsMentorOpen(true)}
+              onClick={() => router.push("/my-mentors")}
               className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
             >
               View All
@@ -618,250 +714,8 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-bold">Recommendations for You</h2>
-            <button
-              type="button"
-              onClick={() => setIsMentorOpen(true)}
-              className="rounded-full bg-purple-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-purple-600"
-            >
-              View All
-            </button>
-          </div>
 
-          {recommendedMentors.length > 0 ? (
-            <div className="mt-5 grid gap-4">
-              {recommendedMentors.map((mentor) => (
-                <div key={mentor.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-100 px-4 py-4">
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
-                      {getMentorInitials(mentor.name)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{mentor.name}</p>
-                      <p className="truncate text-xs text-slate-600">{mentor.title}</p>
-                      <p className="truncate text-xs text-slate-500">{mentor.interestTopic}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMentorId(mentor.id)}
-                    className="shrink-0 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
-                  >
-                    Connect
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-bold">Community Highlights</h2>
-            <button
-              type="button"
-              className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="mt-5 grid gap-3">
-            <article className="flex items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
-                LK
-              </div>
-              <div>
-                <p className="text-sm text-slate-900">
-                  <span className="font-bold">Liam Kim</span> was just nominated for{" "}
-                  <span className="font-bold">Mentor of the Month</span>!
-                </p>
-                <p className="mt-1 text-xs text-slate-500">2 hours ago</p>
-              </div>
-            </article>
-
-            <article className="flex items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
-                MJ
-              </div>
-              <div>
-                <p className="text-sm text-slate-900">
-                  <span className="font-bold">Maria J.</span> just completed her{" "}
-                  <span className="font-bold">Promotion Preparation</span> goal!
-                </p>
-                <p className="mt-1 text-xs text-slate-500">Yesterday</p>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-bold">Top-Rated Resources</h2>
-            <button
-              type="button"
-              className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="mt-5 grid gap-3">
-            {topRatedResourceCourses.map((course, index) => (
-              <article
-                key={course.id}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4"
-              >
-                <div className="flex min-w-0 items-center gap-4">
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${course.accentClass}`}
-                  >
-                    {index === 0 ? "▰" : "▦"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{course.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {index === 0 ? "5.0" : "4.8"} ⭐ ({index === 0 ? "120" : "85"} ratings)
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleStartCourse(course.id)}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
-                >
-                  View
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {startedCourses.length > 0 ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold">My Courses</h2>
-                <p className="mt-1 text-sm text-slate-600">Continue the courses you have started.</p>
-              </div>
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {startedCourses.length} active
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              {startedCourses.map((course) => {
-                const lessons = getCourseLessons(course);
-                const progress = courseProgress[course.id] ?? null;
-                const completionPercent = getCourseCompletionPercent(progress, lessons.length);
-
-                return (
-                  <article key={course.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex items-start gap-4">
-                      <div className={`h-12 w-2 rounded-full ${course.accentClass}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                          {course.category}
-                        </p>
-                        <h3 className="mt-2 text-lg font-bold text-slate-900">{course.title}</h3>
-                        <p className="mt-2 text-sm text-slate-600">{course.description}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5">
-                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                        <span>{completionPercent}% complete</span>
-                        <span>
-                          {progress?.completedLessonIds.length ?? 0}/{lessons.length} lessons
-                        </span>
-                      </div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className={`h-full rounded-full ${course.accentClass}`}
-                          style={{ width: `${completionPercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleStartCourse(course.id)}
-                      className="mt-5 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Continue course
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold">Recommended Courses</h2>
-              <p className="mt-1 text-sm text-slate-600">Start a guided course and track your progress.</p>
-            </div>
-            <div className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-              Dummy content
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            {recommendedCourses.map((course) => {
-              const lessons = getCourseLessons(course);
-              const progress = courseProgress[course.id] ?? null;
-              const completionPercent = getCourseCompletionPercent(progress, lessons.length);
-              const isStarted = Boolean(progress);
-
-              return (
-                <article key={course.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <div className={`h-2 w-16 rounded-full ${course.accentClass}`} />
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                      {course.level}
-                    </span>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                      {course.estimatedHours}h
-                    </span>
-                  </div>
-                  <h3 className="mt-4 text-lg font-bold text-slate-900">{course.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600">{course.description}</p>
-
-                  {isStarted ? (
-                    <div className="mt-5">
-                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                        <span>{completionPercent}% complete</span>
-                        <span>
-                          {progress.completedLessonIds.length}/{lessons.length}
-                        </span>
-                      </div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className={`h-full rounded-full ${course.accentClass}`}
-                          style={{ width: `${completionPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => handleStartCourse(course.id)}
-                    className="mt-5 rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-                  >
-                    {isStarted ? "Continue" : "Start course"}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+<section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold">Upcoming Sessions</h2>
@@ -870,13 +724,14 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                onClick={() => router.push("/sessions")}
                 className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
               >
                 View All
               </button>
               <button
                 type="button"
-                onClick={openSessionProposal}
+                onClick={() => openSessionProposal()}
                 className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
               >
                 Propose New
@@ -930,6 +785,174 @@ export default function Home() {
           </div>
         </section>
 
+
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-lg font-bold">Recommendations for You</h2>
+            <button
+              type="button"
+              onClick={() => router.push("/recommendations")}
+              className="rounded-full bg-purple-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-purple-600"
+            >
+              View All
+            </button>
+          </div>
+
+          {recommendedMentors.length > 0 ? (
+            <div className="mt-5 grid gap-4">
+              {recommendedMentors.map((mentor) => (
+                <div key={mentor.id} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-100 px-4 py-4">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
+                      {getMentorInitials(mentor.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{mentor.name}</p>
+                      <p className="truncate text-xs text-slate-600">{mentor.title}</p>
+                      <p className="truncate text-xs text-slate-500">{mentor.interestTopic}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openSessionProposal(mentor.id)}
+                    className="shrink-0 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+                  >
+                    Connect
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-4">
+            {recommendedCourses.slice(0, 2).map((course) => {
+              const lessons = getCourseLessons(course);
+              const progress = courseProgress[course.id] ?? null;
+              const completionPercent = getCourseCompletionPercent(progress, lessons.length);
+              const isStarted = Boolean(progress);
+
+              return (
+                <div
+                  key={course.id}
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-100 px-4 py-4"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${course.accentClass}`}
+                    >
+                      {course.title
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((word) => word[0])
+                        .join("")}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{course.title}</p>
+                      <p className="truncate text-xs text-slate-600">{course.category}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {isStarted ? `${completionPercent}% complete` : `${course.level} · ${course.estimatedHours}h`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartCourse(course.id)}
+                    className="shrink-0 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                  >
+                    {isStarted ? "Continue" : "Start"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-lg font-bold">Community Highlights</h2>
+            <button
+              type="button"
+              onClick={() => router.push("/community")}
+              className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+            >
+              View All
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            <article className="flex items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
+                LK
+              </div>
+              <div>
+                <p className="text-sm text-slate-900">
+                  <span className="font-bold">Liam Kim</span> was just nominated for{" "}
+                  <span className="font-bold">Mentor of the Month</span>!
+                </p>
+                <p className="mt-1 text-xs text-slate-500">2 hours ago</p>
+              </div>
+            </article>
+
+            <article className="flex items-center gap-4 rounded-2xl bg-slate-50 px-4 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-400 text-sm font-bold text-white">
+                MJ
+              </div>
+              <div>
+                <p className="text-sm text-slate-900">
+                  <span className="font-bold">Maria J.</span> just completed her{" "}
+                  <span className="font-bold">Promotion Preparation</span> goal!
+                </p>
+                <p className="mt-1 text-xs text-slate-500">Yesterday</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-lg font-bold">Top-Rated Resources</h2>
+            <button
+              type="button"
+              onClick={() => router.push("/resources")}
+              className="rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+            >
+              View All
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {topRatedResourceCourses.map((course, index) => (
+              <article
+                key={course.id}
+                className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-4"
+              >
+                <div className="flex min-w-0 items-center gap-4">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${course.accentClass}`}
+                  >
+                    {index === 0 ? "▰" : "▦"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{course.title}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {index === 0 ? "5.0" : "4.8"} ⭐ ({index === 0 ? "120" : "85"} ratings)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleStartCourse(course.id)}
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  View
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+
         
           </div>
 
@@ -942,7 +965,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsAchievementsOpen(true)}
+                    onClick={() => router.push("/achievements")}
                     className="rounded-full bg-blue-500 px-4 py-3 text-xs font-semibold leading-tight text-white transition hover:bg-blue-600"
                   >
                     View <br />More
@@ -1026,6 +1049,7 @@ export default function Home() {
                 </h2>
                 <button
                   type="button"
+                  onClick={() => router.push("/analytics")}
                   className="rounded-full bg-blue-500 px-4 py-3 text-xs font-semibold leading-tight text-white transition hover:bg-blue-600"
                 >
                   View <br />More
@@ -1086,6 +1110,66 @@ export default function Home() {
                     <li>Senior Finance Associate (Finance & Accounting)</li>
                   </ul>
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg">
+              <h2 className="text-lg font-black text-slate-900">Learning Resources</h2>
+              <div className="mt-4 grid gap-3">
+                {sidebarLearningCourses.map((course, index) => (
+                  <button
+                    key={course.id}
+                    type="button"
+                    onClick={() => handleStartCourse(course.id)}
+                    className="flex items-center gap-3 text-left"
+                  >
+                    <div
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs font-black text-white ${
+                        index === 0 ? "bg-amber-400" : course.accentClass
+                      }`}
+                    >
+                      {index === 0 ? "↗" : "□"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-slate-700">{course.title}</p>
+                      <p className="truncate text-xs text-slate-500">{course.category}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg">
+              <h2 className="text-lg font-black text-slate-900">Your Progress</h2>
+              <div className="mt-5 grid gap-5">
+                {sidebarCourseProgress.length > 0 ? (
+                  sidebarCourseProgress.slice(0, 3).map((courseSummary) => (
+                    <button
+                      key={courseSummary.course.id}
+                      type="button"
+                      onClick={() => handleStartCourse(courseSummary.course.id)}
+                      className="text-left"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-slate-700">{courseSummary.course.title}</p>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className={`h-full rounded-full ${courseSummary.course.accentClass}`}
+                          style={{ width: `${courseSummary.completionPercent}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {courseSummary.completionPercent}% Complete · {courseSummary.completedLessons}/
+                        {courseSummary.totalLessons} lessons
+                      </p>
+                    </button>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                    Start a course to track progress here.
+                  </div>
+                )}
               </div>
             </section>
           </aside>
@@ -1325,67 +1409,6 @@ export default function Home() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      ) : null}
-
-      {isAchievementsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">All Achievements</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  {unlockedAchievementCount} of {achievements.length} achievements unlocked.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAchievementsOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg font-semibold text-slate-600 transition hover:bg-slate-200"
-                aria-label="Close achievements"
-              >
-                x
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {achievements.map((achievement) => (
-                <article
-                  key={achievement.id}
-                  className={`rounded-2xl border p-4 ${
-                    achievement.unlocked
-                      ? "border-emerald-200 bg-emerald-50"
-                      : "border-slate-200 bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl ${
-                        achievement.unlocked ? "bg-amber-300" : "bg-slate-200 grayscale"
-                      }`}
-                    >
-                      {achievement.icon}
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-bold text-slate-900">{achievement.label}</h3>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                            achievement.unlocked
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-slate-200 text-slate-500"
-                          }`}
-                        >
-                          {achievement.unlocked ? "Unlocked" : "Locked"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-600">{achievement.description}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
           </div>
         </div>
       ) : null}
