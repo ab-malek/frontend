@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { login } from "@/lib/authApi";
-import { setAuthToken, setAuthUser } from "@/lib/authStorage";
+import { hasCompletedOnboarding, setAuthToken, setAuthUser } from "@/lib/authStorage";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function LoginPage() {
       }
       if (response.token) {
         setAuthToken(response.token);
-        router.replace("/");
+        router.replace(hasCompletedOnboarding() ? "/" : "/onboarding");
       }
     } catch (err) {
       const text = err instanceof Error ? err.message : "Login failed";

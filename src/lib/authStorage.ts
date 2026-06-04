@@ -2,6 +2,7 @@ export const AUTH_TOKEN_KEY = "theyassist_auth_token";
 export const AUTH_USER_KEY = "theyassist_auth_user";
 export const AUTH_USER_NAME_KEY = "theyassist_auth_user_name";
 export const AUTH_USER_PROFILE_KEY_PREFIX = "theyassist_user_profile";
+export const AUTH_USER_ONBOARDING_KEY_PREFIX = "theyassist_user_onboarding";
 const AUTH_TOKEN_CHANGED_EVENT = "theyassist_auth_token_changed";
 
 export type StoredAuthUser = {
@@ -14,6 +15,12 @@ export type StoredUserProfile = {
   background: string;
   interestTopics: string[];
   experience: string;
+};
+
+export type StoredUserOnboarding = {
+  interestTopics: string[];
+  familiarLanguages: string[];
+  completedAt: string;
 };
 
 export function getAuthToken() {
@@ -104,9 +111,59 @@ export function setAuthUserProfile(profile: StoredUserProfile) {
   window.dispatchEvent(new Event(AUTH_TOKEN_CHANGED_EVENT));
 }
 
+export function getAuthUserOnboarding() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const savedOnboarding = getAuthUserOnboardingSnapshot();
+
+  if (!savedOnboarding) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(savedOnboarding) as StoredUserOnboarding;
+  } catch {
+    const user = getAuthUser();
+    window.localStorage.removeItem(getUserOnboardingKey(user));
+    return null;
+  }
+}
+
+export function getAuthUserOnboardingSnapshot() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const user = getAuthUser();
+  return window.localStorage.getItem(getUserOnboardingKey(user));
+}
+
+export function hasCompletedOnboarding() {
+  return Boolean(getAuthUserOnboarding());
+}
+
+export function setAuthUserOnboarding(onboarding: Omit<StoredUserOnboarding, "completedAt">) {
+  const user = getAuthUser();
+  window.localStorage.setItem(
+    getUserOnboardingKey(user),
+    JSON.stringify({
+      ...onboarding,
+      completedAt: new Date().toISOString(),
+    })
+  );
+  window.dispatchEvent(new Event(AUTH_TOKEN_CHANGED_EVENT));
+}
+
 function getUserProfileKey(user: StoredAuthUser | null) {
   const userId = user?.id ?? user?.email ?? "current";
   return `${AUTH_USER_PROFILE_KEY_PREFIX}:${userId}`;
+}
+
+function getUserOnboardingKey(user: StoredAuthUser | null) {
+  const userId = user?.id ?? user?.email ?? "current";
+  return `${AUTH_USER_ONBOARDING_KEY_PREFIX}:${userId}`;
 }
 
 export function clearAuthToken() {
